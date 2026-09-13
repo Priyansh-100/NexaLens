@@ -1,26 +1,20 @@
-version: "3.8"
-
 services:
   postgres:
     image: pgvector/pgvector:pg16
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: nexalens
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-nexalens}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
       interval: 5s
       timeout: 5s
       retries: 5
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -35,8 +29,6 @@ services:
       CHROMA_SERVER_HOST: 0.0.0.0
       CHROMA_SERVER_HTTP_PORT: 8000
       ANONYMIZED_TELEMETRY: "FALSE"
-    ports:
-      - "8001:8000"
     volumes:
       - chroma_data:/chroma/chroma
     healthcheck:
@@ -47,10 +39,15 @@ services:
 
   ollama:
     image: ollama/ollama:latest
-    ports:
-      - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    profiles:
+      - gpu
     deploy:
       resources:
         reservations:
@@ -58,18 +55,25 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+
+  ollama-cpu:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama_data:/root/.ollama
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
       interval: 30s
       timeout: 10s
       retries: 3
+    profiles:
+      - cpu
 
   api:
     build:
       context: ..
       dockerfile: docker/Dockerfile.api
     environment:
-      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/nexalens
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-nexalens}
       - REDIS_URL=redis://redis:6379/0
       - CHROMA_HOST=chroma
       - CHROMA_PORT=8000
@@ -85,10 +89,37 @@ services:
         condition: service_healthy
       chroma:
         condition: service_healthy
-      ollama:
+    volumes:
+      - ../src:/app/src
+    profiles:
+      - gpu
+      - cpu
+
+  api-cpu:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.api
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-nexalens}
+      - REDIS_URL=redis://redis:6379/0
+      - CHROMA_HOST=chroma
+      - CHROMA_PORT=8000
+      - OLLAMA_HOST=http://host.docker.internal:11434
+      - APP_ENV=development
+      - LOG_LEVEL=INFO
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      chroma:
         condition: service_healthy
     volumes:
       - ../src:/app/src
+    profiles:
+      - cpu
 
   ui:
     build:
@@ -100,6 +131,9 @@ services:
       - "8501:8501"
     depends_on:
       - api
+    profiles:
+      - gpu
+      - cpu
 
 volumes:
   postgres_data:
