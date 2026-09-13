@@ -2,8 +2,11 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+DEFAULT_SECRET = "dev-secret-change-in-production"
 
 
 class Settings(BaseSettings):
@@ -18,14 +21,17 @@ class Settings(BaseSettings):
     app_env: Literal["development", "staging", "production"] = "development"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
 
-    database_url: str = Field(..., validation_alias="DATABASE_URL")
+    postgres_user: str = "postgres"
+    postgres_password: str = "change-me-in-production"
+    postgres_db: str = "nexalens"
+    database_url: str = Field(default="", validation_alias="DATABASE_URL")
     database_pool_size: int = 10
     database_max_overflow: int = 20
 
     redis_url: str = Field(default="redis://localhost:6379/0", validation_alias="REDIS_URL")
 
     chroma_host: str = "localhost"
-    chroma_port: int = 8000
+    chroma_port: int = 8001
     chroma_collection: str = "nexalens_docs"
 
     ollama_host: str = "http://localhost:11434"
@@ -46,10 +52,10 @@ class Settings(BaseSettings):
 
     api_host: str = "0.0.0.0"
     api_port: int = 8000
-    api_workers: int = 4
+    api_workers: int = 1
     cors_origins: list[str] = ["http://localhost:3000", "http://localhost:8501"]
 
-    secret_key: str = "dev-secret-change-in-production"
+    secret_key: str = DEFAULT_SECRET
     access_token_expire_minutes: int = 60
     refresh_token_expire_days: int = 7
 
@@ -69,6 +75,24 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             return [ext.strip() for ext in v.split(",")]
         return v
+
+    @model_validator(mode="after")
+    def validate_production_security(self) -> "Settings":
+        if self.app_env == "production":
+            if self.secret_key == DEFAULT_SECRET:
+                raise ValueError("Production SECRET_KEY must be configured (not default)")
+            if self.postgres_password == "change-me-in-production":
+                raise ValueError("Production POSTGRES_PASSWORD must be configured")
+        return self
+
+    @model_validator(mode="after")
+    def build_database_url(self) -> "Settings":
+        if not self.database_url:
+            self.database_url = (
+                f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}"
+                f"@localhost:5432/{self.postgres_db}"
+            )
+        return self
 
 
 @lru_cache
