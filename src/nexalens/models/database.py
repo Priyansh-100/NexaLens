@@ -19,11 +19,26 @@ class Base(DeclarativeBase):
     pass
 
 
+class OrganizationModel(Base):
+    __tablename__ = "organizations"
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    slug: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (Index("ix_organizations_slug", "slug"),)
+
+
 class DataSourceModel(Base):
     __tablename__ = "data_sources"
 
     id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
-    name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    organization_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
     type: Mapped[str] = mapped_column(Enum("sql", "document", name="datasource_type"), nullable=False)
     config: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -31,9 +46,13 @@ class DataSourceModel(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
+    organization: Mapped["OrganizationModel"] = relationship("OrganizationModel")
     documents: Mapped[list["DocumentModel"]] = relationship("DocumentModel", back_populates="source", cascade="all, delete-orphan")
 
-    __table_args__ = (Index("ix_data_sources_type_active", "type", "is_active"),)
+    __table_args__ = (
+        Index("ix_data_sources_type_active", "type", "is_active"),
+        Index("ix_data_sources_organization_id", "organization_id"),
+    )
 
 
 class DocumentModel(Base):

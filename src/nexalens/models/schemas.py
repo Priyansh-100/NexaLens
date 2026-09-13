@@ -24,6 +24,29 @@ class UserRole(str, Enum):
     VIEWER = "viewer"
 
 
+class Organization(BaseModel):
+    id: UUID = Field(default_factory=uuid4)
+    name: str
+    slug: str
+    description: str | None = None
+    is_active: bool = True
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class OrganizationCreate(BaseModel):
+    name: str
+    slug: str
+    description: str | None = None
+
+
+class OrganizationUpdate(BaseModel):
+    name: str | None = None
+    slug: str | None = None
+    description: str | None = None
+    is_active: bool | None = None
+
+
 class FinancialModelType(str, Enum):
     DCF = "dcf"
     NPV = "npv"
