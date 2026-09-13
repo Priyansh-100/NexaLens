@@ -18,10 +18,14 @@ from nexalens.services.embeddings import embedding_service
 from nexalens.services.llm import llm_service
 from nexalens.sql.schema import schema_service
 from nexalens.sql.service import sql_service
+from nexalens.sql.connection_manager import datasource_connection_manager
 from nexalens.documents.service import document_service
 from nexalens.analytics.financial import financial_modeling_service
 from nexalens.analytics.forecasting import forecasting_service
 from nexalens.analytics.scheduler import report_scheduler
+from nexalens.models.database import DataSourceModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = get_logger(__name__)
 
@@ -143,17 +147,32 @@ class RAGOrchestrator:
             processing_time_ms=processing_time,
         )
 
-    async def _execute_sql(self, request: QueryRequest, session) -> SQLResult | None:
+    async def _execute_sql(self, request: QueryRequest, session: AsyncSession) -> SQLResult | None:
         try:
             data_source_ids = request.data_source_ids
             if not data_source_ids:
                 return None
 
-            schema = await self.schema_service.get_schema(session, data_source_ids[0])
+            ds_id = data_source_ids[0]
+
+            # Get the data source model to check type and config
+            result = await session.execute(select(DataSourceModel).where(DataSourceModel.id == ds_id))
+            data_source = result.scalar_one_or_none()
+            if not data_source:
+                logger.warning("datasource_not_found", datasource_id=str(ds_id))
+                return None
+
+            # If it's an external SQL data source, use connection manager
+            if data_source.type == "sql" and data_source.config.get("host"):
+                return await self._execute_sql_on_external_datasource(request, ds_id, session)
+
+            # Otherwise use the application database (for internal/metadata queries)
+            schema = await self.schema_service.get_schema(session, ds_id)
+            allowed_tables = set(schema.keys())
             sql = await self.sql_service.generate_sql(request.question, schema)
             logger.debug("generated_sql", sql=sql[:200])
 
-            result = await self.sql_service.execute_sql(session, sql)
+            result = await self.sql_service.execute_sql(session, sql, allowed_tables=allowed_tables)
 
             if request.include_sources and result.row_count > 0:
                 explanation = await self._explain_sql_result(request.question, sql, result)
@@ -162,6 +181,38 @@ class RAGOrchestrator:
             return result
         except Exception as e:
             logger.error("sql_execution_failed", error=str(e))
+            return None
+
+    async def _execute_sql_on_external_datasource(
+        self,
+        request: QueryRequest,
+        ds_id: UUID,
+        app_session: AsyncSession,
+    ) -> SQLResult | None:
+        """Execute SQL on an external data source using connection manager."""
+        try:
+            # Get the data source again from app session for config
+            result = await app_session.execute(select(DataSourceModel).where(DataSourceModel.id == ds_id))
+            data_source = result.scalar_one_or_none()
+            if not data_source:
+                return None
+
+            # Use connection manager to get a session on the external DB
+            async with datasource_connection_manager.get_session(data_source) as ext_session:
+                schema = await self.schema_service.get_schema(ext_session, ds_id)
+                allowed_tables = set(schema.keys())
+                sql = await self.sql_service.generate_sql(request.question, schema)
+                logger.debug("generated_sql_external", sql=sql[:200])
+
+                result = await self.sql_service.execute_sql(ext_session, sql, allowed_tables=allowed_tables)
+
+                if request.include_sources and result.row_count > 0:
+                    explanation = await self._explain_sql_result(request.question, sql, result)
+                    result.explanation = explanation
+
+                return result
+        except Exception as e:
+            logger.error("external_sql_execution_failed", error=str(e), datasource_id=str(ds_id))
             return None
 
     async def _search_documents(self, request: QueryRequest) -> list[DocumentResult]:
@@ -220,23 +271,72 @@ Provide a 2-3 sentence business interpretation."""
             logger.error("financial_model_failed", error=str(e))
             return None
 
-    async def _execute_forecast(self, request: QueryRequest, session) -> ForecastResult | None:
+    async def _execute_forecast(self, request: QueryRequest, session: AsyncSession) -> ForecastResult | None:
         try:
             from nexalens.models.schemas import ForecastRequest, ForecastModelType
             import pandas as pd
+            import re
 
             data_source_ids = request.data_source_ids
             if not data_source_ids:
                 return None
 
-            schema = await self.schema_service.get_schema(session, data_source_ids[0])
+            ds_id = data_source_ids[0]
+
+            # Get the data source model
+            result = await session.execute(select(DataSourceModel).where(DataSourceModel.id == ds_id))
+            data_source = result.scalar_one_or_none()
+            if not data_source:
+                return None
+
+            # Determine which session to use
+            if data_source.type == "sql" and data_source.config.get("host"):
+                # External data source - use connection manager
+                async with datasource_connection_manager.get_session(data_source) as ext_session:
+                    return await self._execute_forecast_on_session(request, ext_session, ds_id)
+            else:
+                # Use application database
+                return await self._execute_forecast_on_session(request, session, ds_id)
+        except Exception as e:
+            logger.error("forecast_failed", error=str(e))
+            return None
+
+    async def _execute_forecast_on_session(
+        self,
+        request: QueryRequest,
+        ext_session: AsyncSession,
+        ds_id: UUID,
+    ) -> ForecastResult | None:
+        """Execute forecast logic on a given session (external or app)."""
+        try:
+            from nexalens.models.schemas import ForecastRequest, ForecastModelType
+            import pandas as pd
+            import re
+
+            schema = await self.schema_service.get_schema(ext_session, ds_id)
 
             table, metric_col, date_col = await self._identify_timeseries_table(schema, request.question)
             if not table:
                 return None
 
+            # Validate identifiers
+            identifier_re = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+            for name, field in [(table, "table"), (metric_col, "metric column"), (date_col, "date column")]:
+                if not identifier_re.fullmatch(name):
+                    logger.warning("invalid_identifier", identifier=name, field=field)
+                    return None
+
+            # Verify table and columns exist in schema
+            if table not in schema:
+                logger.warning("table_not_in_schema", table=table)
+                return None
+            table_columns = {col["name"] for col in schema[table]}
+            if metric_col not in table_columns or date_col not in table_columns:
+                logger.warning("column_not_in_table", table=table, metric_col=metric_col, date_col=date_col)
+                return None
+
             sql = f"SELECT {date_col}, {metric_col} FROM {table} ORDER BY {date_col}"
-            sql_result = await self.sql_service.execute_sql(session, sql)
+            sql_result = await self.sql_service.execute_sql(ext_session, sql)
 
             if sql_result.row_count < 3:
                 return None
@@ -244,6 +344,7 @@ Provide a 2-3 sentence business interpretation."""
             df = pd.DataFrame(sql_result.rows)
 
             fc_request = ForecastRequest(
+                table_name=table,
                 metric_column=metric_col,
                 date_column=date_col,
                 periods=12,
@@ -253,7 +354,7 @@ Provide a 2-3 sentence business interpretation."""
 
             return self.forecasting_service.run_forecast(df, fc_request)
         except Exception as e:
-            logger.error("forecast_failed", error=str(e))
+            logger.error("forecast_on_session_failed", error=str(e))
             return None
 
     async def _create_schedule(self, request: QueryRequest, session, user_id: UUID) -> ReportSchedule | None:
