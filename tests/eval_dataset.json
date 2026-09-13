@@ -1,0 +1,42 @@
+[
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440001",
+    "question": "What was our total revenue in Q3 2023?",
+    "intent": "sql",
+    "expected_sql": "SELECT SUM(amount) as total_revenue FROM orders WHERE order_date >= '2023-07-01' AND order_date < '2023-10-01'",
+    "relevant_doc_ids": []
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440002",
+    "question": "Show me monthly revenue trend for 2023",
+    "intent": "sql",
+    "expected_sql": "SELECT DATE_TRUNC('month', order_date) as month, SUM(amount) as revenue FROM orders WHERE order_date >= '2023-01-01' AND order_date < '2024-01-01' GROUP BY DATE_TRUNC('month', order_date) ORDER BY month",
+    "relevant_doc_ids": []
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440003",
+    "question": "What is our refund policy for enterprise customers?",
+    "intent": "document",
+    "relevant_doc_ids": ["550e8400-e29b-41d4-a716-446655440101"]
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440004",
+    "question": "Compare Q3 actual revenue to the forecast in the board presentation",
+    "intent": "hybrid",
+    "expected_sql": "SELECT SUM(amount) as actual_revenue FROM orders WHERE order_date >= '2023-07-01' AND order_date < '2023-10-01'",
+    "relevant_doc_ids": ["550e8400-e29b-41d4-a716-446655440102"]
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440005",
+    "question": "How many active customers do we have?",
+    "intent": "sql",
+    "expected_sql": "SELECT COUNT(DISTINCT customer_id) as active_customers FROM orders WHERE order_date >= CURRENT_DATE - INTERVAL '90 days'",
+    "relevant_doc_ids": []
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440006",
+    "question": "What are the key terms in our standard MSA?",
+    "intent": "document",
+    "relevant_doc_ids": ["550e8400-e29b-41d4-a716-446655440103"]
+  }
+]
