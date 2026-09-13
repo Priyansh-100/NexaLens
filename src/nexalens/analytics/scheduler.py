@@ -163,10 +163,18 @@ class ReportSchedulerService:
         session: AsyncSession,
         schedule_id: UUID | None = None,
         limit: int = 50,
+        user_id: UUID | None = None,
     ) -> list[ReportExecution]:
-        stmt = select(ReportExecutionModel).order_by(ReportExecutionModel.started_at.desc()).limit(limit)
+        stmt = (
+            select(ReportExecutionModel)
+            .join(ReportScheduleModel, ReportExecutionModel.schedule_id == ReportScheduleModel.id)
+            .order_by(ReportExecutionModel.started_at.desc())
+            .limit(limit)
+        )
         if schedule_id:
             stmt = stmt.where(ReportExecutionModel.schedule_id == schedule_id)
+        if user_id:
+            stmt = stmt.where(ReportScheduleModel.created_by == user_id)
         result = await session.execute(stmt)
         return [self._to_execution_schema(e) for e in result.scalars().all()]
 

@@ -119,4 +119,6 @@ async def list_executions(
     session: AsyncSession = Depends(get_db_session),
     current_user: User = Depends(get_current_user),
 ) -> list[ReportExecution]:
-    return await report_scheduler.get_executions(session, schedule_id, limit)
+    # Admins see all executions, regular users only see their own
+    user_id = None if current_user.role == UserRole.ADMIN else current_user.id
+    return await report_scheduler.get_executions(session, schedule_id, limit, user_id)
