@@ -4,6 +4,7 @@ from typing import Any
 from uuid import UUID
 
 import pandas as pd
+import sqlglot
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,6 +31,8 @@ Rules:
 8. Use parameterized queries for values
 9. Cast types explicitly when needed
 10. Optimize for readability and performance
+11. ONLY generate SELECT statements (read-only)
+12. Do NOT use: INSERT, UPDATE, DELETE, DROP, ALTER, CREATE, TRUNCATE, GRANT, REVOKE, COPY, CALL, DO
 
 Schema Context:
 {schema}
@@ -46,6 +49,34 @@ WITH monthly_revenue AS (
     GROUP BY DATE_TRUNC('month', order_date)
 )
 SELECT month, total_revenue FROM monthly_revenue ORDER BY month;"""
+
+
+FORBIDDEN_KEYWORDS = {
+    "INSERT",
+    "UPDATE",
+    "DELETE",
+    "DROP",
+    "ALTER",
+    "CREATE",
+    "TRUNCATE",
+    "GRANT",
+    "REVOKE",
+    "COPY",
+    "CALL",
+    "DO",
+    "COMMIT",
+    "ROLLBACK",
+    "SAVEPOINT",
+    "LOCK",
+    "VACUUM",
+    "ANALYZE",
+    "REINDEX",
+    "CLUSTER",
+    "CHECKPOINT",
+}
+
+
+IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 class SQLService:
@@ -100,27 +131,71 @@ class SQLService:
         sql = re.sub(r"\s*```$", "", sql)
         return sql.strip()
 
+    def validate_sql(self, sql: str, allowed_tables: set[str] | None = None) -> None:
+        """Validate SQL for safety: read-only, no forbidden keywords, valid identifiers."""
+        if not sql or not sql.strip():
+            raise SQLGenerationError("Empty SQL query")
+
+        # Parse with sqlglot for proper AST analysis
+        try:
+            parsed = sqlglot.parse_one(sql, dialect="postgres")
+        except Exception as e:
+            raise SQLGenerationError(f"SQL parsing failed: {e}") from e
+
+        # Check for forbidden statement types
+        for statement in parsed.walk():
+            stmt_type = type(statement).__name__.upper()
+            if stmt_type in FORBIDDEN_KEYWORDS:
+                raise SQLGenerationError(f"Forbidden SQL statement: {stmt_type}")
+
+        # Ensure it's a SELECT or WITH statement
+        if not isinstance(parsed, (sqlglot.exp.Select, sqlglot.exp.With)):
+            raise SQLGenerationError("Only SELECT/WITH statements are allowed")
+
+        # Validate identifiers if allowed_tables provided
+        if allowed_tables:
+            for table in parsed.find_all(sqlglot.exp.Table):
+                table_name = table.name
+                if table_name and table_name not in allowed_tables:
+                    raise SQLGenerationError(f"Table '{table_name}' not in allowed schema")
+
     async def execute_sql(
         self,
         session: AsyncSession,
         sql: str,
         params: dict[str, Any] | None = None,
+        allowed_tables: set[str] | None = None,
     ) -> SQLResult:
+        # Validate SQL before execution
+        self.validate_sql(sql, allowed_tables)
+
         start_time = time.perf_counter()
         try:
+            # Apply statement timeout
+            timeout_ms = self.timeout * 1000
+            await session.execute(text(f"SET LOCAL statement_timeout = {timeout_ms}"))
+
             result = await session.execute(text(sql), params or {})
             rows = result.mappings().all()
             columns = list(result.keys()) if result.keys() else []
             data = [dict(row) for row in rows]
             execution_time = (time.perf_counter() - start_time) * 1000
 
+            # Truncate to max_rows
+            truncated_data = data[: self.max_rows]
+
             return SQLResult(
                 sql=sql,
                 columns=columns,
-                rows=data[: self.max_rows],
+                rows=truncated_data,
                 row_count=len(data),
                 execution_time_ms=execution_time,
             )
+        except sqlglot.errors.ParseError as e:
+            logger.error("sql_validation_failed", error=str(e), sql=sql[:200])
+            raise SQLGenerationError(f"SQL validation failed: {e}") from e
+        except SQLGenerationError:
+            raise
         except Exception as e:
             logger.error("sql_execution_failed", error=str(e), sql=sql[:200])
             raise SQLExecutionError(f"SQL execution failed: {e}") from e
