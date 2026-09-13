@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import make_asgi_app
 
-from nexalens.api.routes import analytics, auth, data_sources, health, query, reports
+from nexalens.api.routes import analytics, auth, data_sources, health, organizations, query, reports
 from nexalens.analytics.scheduler import report_scheduler
 from nexalens.core.config import get_settings
 from nexalens.core.logging import get_logger, setup_logging
@@ -52,6 +52,7 @@ app.include_router(query.router)
 app.include_router(data_sources.router)
 app.include_router(analytics.router)
 app.include_router(reports.router)
+app.include_router(organizations.router)
 
 
 @app.get("/")
