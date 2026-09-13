@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>{{ schedule_name }} - Executive Summary</title>
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+            margin: 0; 
+            padding: 20px;
+            line-height: 1.6; 
+            color: #333;
+            background: #f8f9fa;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .header { 
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: white;
+            padding: 30px;
+        }
+        .header h1 { margin: 0; font-size: 1.8em; }
+        .header .meta { color: #a0b0c0; font-size: 0.95em; margin-top: 10px; }
+        .content { padding: 30px; }
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .kpi-card {
+            background: linear-gradient(135deg, #4472C4 0%, #2d5aa0 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .kpi-card .label { font-size: 0.85em; opacity: 0.9; text-transform: uppercase; letter-spacing: 0.5px; }
+        .kpi-card .value { font-size: 1.8em; font-weight: 700; margin-top: 5px; }
+        .section { margin: 30px 0; }
+        .section h2 { 
+            color: #1a1a2e; 
+            border-bottom: 2px solid #4472C4; 
+            padding-bottom: 8px; 
+            font-size: 1.3em;
+        }
+        .answer-box {
+            background: #f8f9fa;
+            border-left: 4px solid #4472C4;
+            padding: 20px;
+            border-radius: 0 8px 8px 0;
+            margin: 15px 0;
+        }
+        .table-container { overflow-x: auto; }
+        .data-table { 
+            border-collapse: collapse; 
+            width: 100%; 
+            font-size: 0.9em;
+        }
+        .data-table th, .data-table td { 
+            border: 1px solid #e0e0e0; 
+            padding: 10px 12px; 
+            text-align: left; 
+        }
+        .data-table th { 
+            background: #4472C4; 
+            color: white; 
+            font-weight: 600;
+        }
+        .data-table tr:nth-child(even) { background: #fafbfc; }
+        .chart-container {
+            text-align: center;
+            margin: 20px 0;
+        }
+        .chart-container img {
+            max-width: 100%;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+        }
+        .footer {
+            background: #f8f9fa;
+            padding: 20px 30px;
+            border-top: 1px solid #e0e0e0;
+            color: #888;
+            font-size: 0.85em;
+        }
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 16px;
+            font-size: 0.75em;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .badge-success { background: #e8f5e9; color: #2e7d32; }
+        .badge-info { background: #e3f2fd; color: #1565c0; }
+        .badge-warning { background: #fff3e0; color: #e65100; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>{{ schedule_name }}</h1>
+            <div class="meta">
+                {{ generated_at }} | {{ question }}
+            </div>
+        </div>
+
+        <div class="content">
+            <div class="section">
+                <h2>📋 Executive Summary</h2>
+                <div class="answer-box">{{ answer }}</div>
+            </div>
+
+            {% if financial_result %}
+            <div class="section">
+                <h2>💰 Financial Analysis: {{ financial_result.model_type.value.upper() }}</h2>
+                <p>{{ financial_result.explanation }}</p>
+                <div class="kpi-grid">
+                    {% if financial_result.npv is not none %}
+                    <div class="kpi-card">
+                        <div class="label">Net Present Value</div>
+                        <div class="value">${{ financial_result.npv|format_currency }}</div>
+                    </div>
+                    {% endif %}
+                    {% if financial_result.irr is not none %}
+                    <div class="kpi-card">
+                        <div class="label">Internal Rate of Return</div>
+                        <div class="value">{{ financial_result.irr|format_pct }}</div>
+                    </div>
+                    {% endif %}
+                    {% if financial_result.dcf_value is not none %}
+                    <div class="kpi-card">
+                        <div class="label">DCF Enterprise Value</div>
+                        <div class="value">${{ financial_result.dcf_value|format_currency }}</div>
+                    </div>
+                    {% endif %}
+                    {% if financial_result.payback_period is not none %}
+                    <div class="kpi-card">
+                        <div class="label">Payback Period</div>
+                        <div class="value">{{ financial_result.payback_period }} yrs</div>
+                    </div>
+                    {% endif %}
+                </div>
+                {% if financial_result.sensitivity_table %}
+                <h3>Sensitivity Analysis</h3>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr><th>Variable</th><th>Values Tested</th></tr>
+                        </thead>
+                        <tbody>
+                        {% for var, vals in financial_result.sensitivity_table.items() %}
+                            <tr>
+                                <td>{{ var.replace('_', ' ').title() }}</td>
+                                <td>{{ vals | join(', ') }}</td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% endif %}
+                {% if financial_result.excel_base64 %}
+                <p><span class="badge badge-info">📊 Excel Attached</span> Detailed model with formulas and charts available for download.</p>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {% if forecast_result %}
+            <div class="section">
+                <h2>🔮 Forecast: {{ forecast_result.model_type.upper() }}</h2>
+                <p>{{ forecast_result.explanation }}</p>
+                
+                {% if forecast_result.forecast %}
+                <div class="kpi-grid">
+                    <div class="kpi-card" style="background: linear-gradient(135deg, #e65100 0%, #bf360c 100%);">
+                        <div class="label">Next Period ({{ forecast_result.forecast[0].date }})</div>
+                        <div class="value">{{ forecast_result.forecast[0].yhat|format_number }}</div>
+                    </div>
+                    <div class="kpi-card" style="background: linear-gradient(135deg, #7b1fa2 0%, #4a148c 100%);">
+                        <div class="label">95% Confidence Interval</div>
+                        <div class="value">{{ forecast_result.forecast[0].yhat_lower|format_number }} – {{ forecast_result.forecast[0].yhat_upper|format_number }}</div>
+                    </div>
+                    {% if forecast_result.metrics.mae is defined %}
+                    <div class="kpi-card" style="background: linear-gradient(135deg, #2e7d32 0%, #1b5e20 100%);">
+                        <div class="label">Backtest MAE</div>
+                        <div class="value">{{ "%.1f"|format(forecast_result.metrics.mae) }}</div>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <h3>Forecast Horizon</h3>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr><th>Date</th><th>Forecast</th><th>Lower (95%)</th><th>Upper (95%)</th></tr>
+                        </thead>
+                        <tbody>
+                        {% for point in forecast_result.forecast[:12] %}
+                            <tr>
+                                <td>{{ point.date }}</td>
+                                <td><strong>{{ point.yhat|format_number }}</strong></td>
+                                <td>{{ point.yhat_lower|format_number }}</td>
+                                <td>{{ point.yhat_upper|format_number }}</td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                {% if forecast_result.plot_base64 %}
+                <div class="chart-container">
+                    <img src="data:image/png;base64,{{ forecast_result.plot_base64 }}" alt="Forecast Chart">
+                </div>
+                {% endif %}
+
+                {% if forecast_result.metrics %}
+                <div style="margin-top: 15px; padding: 15px; background: #f8f9fa; border-radius: 4px;">
+                    <strong>Model Performance (Backtest):</strong>
+                    {% for key, val in forecast_result.metrics.items() %}
+                    <span style="margin-right: 20px;">{{ key.upper() }}: {{ "%.2f"|format(val) }}</span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {% if sql_result and sql_result.rows %}
+            <div class="section">
+                <h2>📊 Data Query Results</h2>
+                {% if sql_result.explanation %}
+                <p><em>{{ sql_result.explanation }}</em></p>
+                {% endif %}
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>{% for col in sql_result.columns %}<th>{{ col }}</th>{% endfor %}</tr>
+                        </thead>
+                        <tbody>
+                            {% for row in sql_result.rows[:50] %}
+                            <tr>{% for col in sql_result.columns %}<td>{{ row.get(col, '') }}</td>{% endfor %}</tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% if sql_result.row_count > 50 %}<p><em>Showing first 50 of {{ sql_result.row_count }} rows</em></p>{% endif %}
+            </div>
+            {% endif %}
+
+            {% if doc_results %}
+            <div class="section">
+                <h2>📄 Supporting Documents</h2>
+                {% for doc in doc_results %}
+                <div style="background: #f5f5f5; border-left: 4px solid #4472C4; padding: 15px; margin: 15px 0; border-radius: 0 4px 4px 0;">
+                    <strong>{{ doc.title }}</strong> <span style="color: #666; font-size: 0.9em;">({{ "%.0f"|format(doc.score * 100) }}% relevance)</span><br>
+                    <span style="color: #555;">{{ doc.chunk_content[:400] }}...</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="footer">
+            <span class="badge badge-success">Confidence: {{ "%.0f"|format(confidence * 100) }}%</span>
+            &nbsp;&nbsp;
+            Generated by <strong>NexaLens</strong> Business Analytics Platform | {{ generated_at }}
+        </div>
+    </div>
+</body>
+</html>

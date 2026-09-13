@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>{{ schedule_name }}</title>
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+            margin: 40px; 
+            line-height: 1.6; 
+            color: #333;
+        }
+        h1 { 
+            color: #1a1a2e; 
+            border-bottom: 3px solid #4472C4; 
+            padding-bottom: 10px; 
+            margin-bottom: 5px;
+        }
+        h2 { 
+            color: #2d2d44; 
+            margin-top: 30px; 
+            border-bottom: 1px solid #eee;
+            padding-bottom: 5px;
+        }
+        .meta { 
+            color: #666; 
+            font-size: 0.9em; 
+            margin-bottom: 20px; 
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+        .section { margin: 20px 0; }
+        .sql-table { 
+            border-collapse: collapse; 
+            width: 100%; 
+            margin: 15px 0; 
+            font-size: 0.9em;
+        }
+        .sql-table th, .sql-table td { 
+            border: 1px solid #ddd; 
+            padding: 8px 12px; 
+            text-align: left; 
+        }
+        .sql-table th { 
+            background: #4472C4; 
+            color: white; 
+            font-weight: 600;
+        }
+        .sql-table tr:nth-child(even) { background: #f9f9f9; }
+        .sql-table tr:hover { background: #f0f4f8; }
+        .doc-chunk { 
+            background: #f5f5f5; 
+            padding: 15px; 
+            margin: 10px 0; 
+            border-left: 4px solid #4472C4; 
+            border-radius: 0 4px 4px 0;
+        }
+        .doc-chunk strong { color: #2d2d44; }
+        .confidence { 
+            display: inline-block; 
+            padding: 8px 20px; 
+            background: #e8f5e9; 
+            color: #2e7d32; 
+            border-radius: 20px; 
+            font-weight: 600;
+            font-size: 1.1em;
+        }
+        .financial-metric {
+            display: inline-block;
+            background: #e3f2fd;
+            color: #1565c0;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 8px;
+            font-weight: 600;
+        }
+        .forecast-point {
+            display: inline-block;
+            background: #fff3e0;
+            color: #e65100;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 8px;
+            font-weight: 600;
+        }
+        .schedule-info {
+            background: #f3e5f5;
+            color: #7b1fa2;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+        .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            color: #999;
+            font-size: 0.8em;
+            text-align: center;
+        }
+        @media print {
+            body { margin: 20px; }
+            .no-print { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <h1>{{ schedule_name }}</h1>
+    <div class="meta">
+        <strong>Generated:</strong> {{ generated_at }}<br>
+        <strong>Question:</strong> {{ question }}
+    </div>
+
+    <div class="section">
+        <h2>Executive Summary</h2>
+        <p>{{ answer }}</p>
+    </div>
+
+    {% if financial_result %}
+    <div class="section">
+        <h2>Financial Model: {{ financial_result.model_type.value.upper() }}</h2>
+        <p>{{ financial_result.explanation }}</p>
+        <div>
+            {% if financial_result.npv is not none %}
+            <span class="financial-metric">NPV: ${{ financial_result.npv|format_currency }}</span>
+            {% endif %}
+            {% if financial_result.irr is not none %}
+            <span class="financial-metric">IRR: {{ financial_result.irr|format_pct }}</span>
+            {% endif %}
+            {% if financial_result.dcf_value is not none %}
+            <span class="financial-metric">DCF Value: ${{ financial_result.dcf_value|format_currency }}</span>
+            {% endif %}
+            {% if financial_result.payback_period is not none %}
+            <span class="financial-metric">Payback: {{ financial_result.payback_period }} years</span>
+            {% endif %}
+        </div>
+        {% if financial_result.excel_base64 %}
+        <p><em>📊 Excel workbook attached with detailed calculations and sensitivity tables.</em></p>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% if forecast_result %}
+    <div class="section">
+        <h2>Forecast: {{ forecast_result.model_type.upper() }}</h2>
+        <p>{{ forecast_result.explanation }}</p>
+        {% if forecast_result.forecast %}
+        <div>
+            <span class="forecast-point">
+                Next Period ({{ forecast_result.forecast[0].date }}): {{ forecast_result.forecast[0].yhat|format_number }}
+            </span>
+            <span class="forecast-point">
+                95% CI: {{ forecast_result.forecast[0].yhat_lower|format_number }} - {{ forecast_result.forecast[0].yhat_upper|format_number }}
+            </span>
+        </div>
+        <table class="sql-table">
+            <thead>
+                <tr><th>Period</th><th>Forecast</th><th>Lower (95%)</th><th>Upper (95%)</th></tr>
+            </thead>
+            <tbody>
+            {% for point in forecast_result.forecast[:12] %}
+                <tr>
+                    <td>{{ point.date }}</td>
+                    <td>{{ point.yhat|format_number }}</td>
+                    <td>{{ point.yhat_lower|format_number }}</td>
+                    <td>{{ point.yhat_upper|format_number }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+        {% if forecast_result.plot_base64 %}
+        <div style="text-align: center; margin: 20px 0;">
+            <img src="data:image/png;base64,{{ forecast_result.plot_base64 }}" alt="Forecast Plot" style="max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 4px;">
+        </div>
+        {% endif %}
+        {% if forecast_result.metrics %}
+        <div style="margin-top: 15px; padding: 15px; background: #f8f9fa; border-radius: 4px;">
+            <strong>Backtest Metrics:</strong>
+            {% for key, val in forecast_result.metrics.items() %}
+            <span style="margin-right: 20px;">{{ key.upper() }}: {{ "%.2f"|format(val) }}</span>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% if sql_result and sql_result.rows %}
+    <div class="section">
+        <h2>SQL Results ({{ sql_result.row_count }} rows)</h2>
+        {% if sql_result.explanation %}
+        <p><em>{{ sql_result.explanation }}</em></p>
+        {% endif %}
+        <table class="sql-table">
+            <thead>
+                <tr>{% for col in sql_result.columns %}<th>{{ col }}</th>{% endfor %}</tr>
+            </thead>
+            <tbody>
+                {% for row in sql_result.rows[:100] %}
+                <tr>{% for col in sql_result.columns %}<td>{{ row.get(col, '') }}</td>{% endfor %}</tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% if sql_result.row_count > 100 %}<p><em>Showing first 100 of {{ sql_result.row_count }} rows</em></p>{% endif %}
+    </div>
+    {% endif %}
+
+    {% if doc_results %}
+    <div class="section">
+        <h2>Document Sources</h2>
+        {% for doc in doc_results %}
+        <div class="doc-chunk">
+            <strong>{{ doc.title }}</strong> <span style="color: #666;">(relevance: {{ "%.0f"|format(doc.score * 100) }}%)</span><br>
+            {{ doc.chunk_content[:500] }}...
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if schedule_result %}
+    <div class="section">
+        <h2>Scheduled Report Created</h2>
+        <div class="schedule-info">
+            <strong>Name:</strong> {{ schedule_result.name }}<br>
+            <strong>Schedule:</strong> {{ schedule_result.cron_expression }}<br>
+            <strong>Format:</strong> {{ schedule_result.format.value }}<br>
+            <strong>Recipients:</strong> {{ schedule_result.recipients | join(', ') }}
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="section">
+        <span class="confidence">Confidence: {{ "%.0f"|format(confidence * 100) }}%</span>
+    </div>
+
+    <div class="footer">
+        Generated by NexaLens Business Analytics Platform | {{ generated_at }}
+    </div>
+</body>
+</html>

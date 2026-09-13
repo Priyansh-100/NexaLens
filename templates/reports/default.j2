@@ -1,0 +1,49 @@
+{{ schedule_name }}
+Generated: {{ generated_at }}
+Question: {{ question }}
+
+=== ANSWER ===
+{{ answer }}
+
+{% if sql_result and sql_result.rows %}
+=== SQL RESULTS ({{ sql_result.row_count }} rows) ===
+Columns: {{ sql_result.columns | join(', ') }}
+{% for row in sql_result.rows[:20] %}
+{{ row }}
+{% endfor %}
+{% endif %}
+
+{% if doc_results %}
+=== DOCUMENT SOURCES ===
+{% for doc in doc_results %}
+- {{ doc.title }} ({{ "%.0f"|format(doc.score * 100) }}%): {{ doc.chunk_content[:200] }}...
+{% endfor %}
+{% endif %}
+
+{% if financial_result %}
+=== FINANCIAL MODEL ({{ financial_result.model_type.value.upper() }}) ===
+{{ financial_result.explanation }}
+{% if financial_result.npv is not none %}NPV: {{ financial_result.npv|format_currency }}{% endif %}
+{% if financial_result.irr is not none %}IRR: {{ financial_result.irr|format_pct }}{% endif %}
+{% if financial_result.dcf_value is not none %}DCF Value: {{ financial_result.dcf_value|format_currency }}{% endif %}
+{% if financial_result.payback_period is not none %}Payback: {{ financial_result.payback_period }} years{% endif %}
+{% if financial_result.excel_base64 %}[Excel attachment available]{% endif %}
+{% endif %}
+
+{% if forecast_result %}
+=== FORECAST ({{ forecast_result.model_type.upper() }}) ===
+{{ forecast_result.explanation }}
+{% if forecast_result.forecast %}
+Next period ({{ forecast_result.forecast[0].date }}): {{ forecast_result.forecast[0].yhat|format_number }} (CI: {{ forecast_result.forecast[0].yhat_lower|format_number }} - {{ forecast_result.forecast[0].yhat_upper|format_number }})
+{% endif %}
+{% endif %}
+
+{% if schedule_result %}
+=== SCHEDULE CREATED ===
+Name: {{ schedule_result.name }}
+Cron: {{ schedule_result.cron_expression }}
+Recipients: {{ schedule_result.recipients | join(', ') }}
+Format: {{ schedule_result.format.value }}
+{% endif %}
+
+Confidence: {{ "%.0f"|format(confidence * 100) }}%
