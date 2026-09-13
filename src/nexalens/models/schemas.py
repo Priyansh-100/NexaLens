@@ -119,6 +119,9 @@ class QueryResponse(BaseModel):
     answer: str
     sql_result: SQLResult | None = None
     document_results: list[DocumentResult] = Field(default_factory=list)
+    financial_result: FinancialModelResult | None = None
+    forecast_result: ForecastResult | None = None
+    schedule_result: ReportSchedule | None = None
     confidence: float = 0.0
     processing_time_ms: float
     timestamp: datetime = Field(default_factory=datetime.utcnow)
@@ -170,6 +173,7 @@ class FinancialModelResult(BaseModel):
 
 
 class ForecastRequest(BaseModel):
+    table_name: str
     metric_column: str
     date_column: str
     periods: int = 12
