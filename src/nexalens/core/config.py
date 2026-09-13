@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     sql_dialect: str = "postgresql"
     sql_max_rows: int = 1000
     sql_timeout: int = 30
+    sql_max_query_cost: float = 10000.0
 
     chunk_size: int = 1000
     chunk_overlap: int = 200
