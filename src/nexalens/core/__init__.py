@@ -15,6 +15,18 @@ from nexalens.core.exceptions import (
     VectorStoreError,
 )
 from nexalens.core.logging import get_logger, setup_logging
+from nexalens.core.rbac import (
+    Permission,
+    RoleRequirement,
+    has_permission,
+    require_all_permissions,
+    require_any_permission,
+    require_any_role,
+    require_permission,
+    require_admin,
+    require_analyst_or_admin,
+    require_roles,
+)
 
 __all__ = [
     "Settings",
@@ -22,6 +34,16 @@ __all__ = [
     "settings",
     "setup_logging",
     "get_logger",
+    "Permission",
+    "RoleRequirement",
+    "require_admin",
+    "require_analyst_or_admin",
+    "require_any_role",
+    "require_roles",
+    "require_permission",
+    "require_all_permissions",
+    "require_any_permission",
+    "has_permission",
     "NexaLensError",
     "ConfigurationError",
     "DatabaseError",

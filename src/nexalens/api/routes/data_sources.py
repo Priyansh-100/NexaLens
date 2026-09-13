@@ -6,6 +6,7 @@ from uuid import UUID
 from nexalens.api.auth import get_current_user
 from nexalens.core.exceptions import ValidationError
 from nexalens.core.logging import get_logger
+from nexalens.core.rbac import require_analyst_or_admin
 from nexalens.models.database import DataSourceModel
 from nexalens.models.schemas import DataSource, DataSourceType, User
 from nexalens.models.session import get_db_session
@@ -19,7 +20,7 @@ logger = get_logger(__name__)
 async def list_data_sources(
     session: AsyncSession = Depends(get_db_session),
     current_user: User = Depends(get_current_user),
-):
+) -> list[DataSource]:
     result = await session.execute(select(DataSourceModel).where(DataSourceModel.is_active == True))
     sources = result.scalars().all()
     return [
@@ -44,8 +45,8 @@ async def create_data_source(
     config: str = Form(...),
     description: str | None = Form(None),
     session: AsyncSession = Depends(get_db_session),
-    current_user: User = Depends(get_current_user),
-):
+    current_user: User = Depends(require_analyst_or_admin),
+) -> DataSource:
     import json
     try:
         config_dict = json.loads(config)
@@ -80,8 +81,8 @@ async def upload_document(
     source_id: UUID,
     file: UploadFile = File(...),
     session: AsyncSession = Depends(get_db_session),
-    current_user: User = Depends(get_current_user),
-):
+    current_user: User = Depends(require_analyst_or_admin),
+) -> dict:
     from nexalens.models.database import DataSourceModel
 
     source = await session.get(DataSourceModel, source_id)
@@ -101,7 +102,7 @@ async def get_data_source(
     source_id: UUID,
     session: AsyncSession = Depends(get_db_session),
     current_user: User = Depends(get_current_user),
-):
+) -> DataSource:
     source = await session.get(DataSourceModel, source_id)
     if not source:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Data source not found")
@@ -118,11 +119,55 @@ async def get_data_source(
     )
 
 
+@router.patch("/{source_id}", response_model=DataSource)
+async def update_data_source(
+    source_id: UUID,
+    name: str | None = Form(None),
+    type: DataSourceType | None = Form(None),
+    config: str | None = Form(None),
+    description: str | None = Form(None),
+    session: AsyncSession = Depends(get_db_session),
+    current_user: User = Depends(require_analyst_or_admin),
+) -> DataSource:
+    import json
+    source = await session.get(DataSourceModel, source_id)
+    if not source:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Data source not found")
+
+    if name is not None:
+        source.name = name
+    if type is not None:
+        source.type = type.value
+    if config is not None:
+        try:
+            config_dict = json.loads(config)
+        except json.JSONDecodeError:
+            raise ValidationError("Invalid JSON config")
+        source.config = config_dict
+    if description is not None:
+        source.description = description
+
+    await session.flush()
+    await session.refresh(source)
+
+    logger.info("data_source_updated", source_id=str(source.id))
+    return DataSource(
+        id=source.id,
+        name=source.name,
+        type=source.type,
+        config=source.config,
+        description=source.description,
+        created_at=source.created_at,
+        updated_at=source.updated_at,
+        is_active=source.is_active,
+    )
+
+
 @router.delete("/{source_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_data_source(
     source_id: UUID,
     session: AsyncSession = Depends(get_db_session),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_analyst_or_admin),
 ):
     source = await session.get(DataSourceModel, source_id)
     if not source:

@@ -1,10 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
 
 from nexalens.api.auth import get_current_user
 from nexalens.core.exceptions import ValidationError
 from nexalens.core.logging import get_logger
+from nexalens.core.rbac import require_analyst_or_admin, require_admin
+from nexalens.models.database import ReportScheduleModel
 from nexalens.models.schemas import (
     ReportExecution,
     ReportFormat,
@@ -12,6 +15,7 @@ from nexalens.models.schemas import (
     ReportScheduleCreate,
     ReportScheduleUpdate,
     User,
+    UserRole,
 )
 from nexalens.models.session import get_db_session
 from nexalens.analytics.scheduler import report_scheduler
@@ -24,7 +28,7 @@ logger = get_logger(__name__)
 async def create_schedule(
     schedule_in: ReportScheduleCreate,
     session: AsyncSession = Depends(get_db_session),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_analyst_or_admin),
 ) -> ReportSchedule:
     try:
         return await report_scheduler.create_schedule(schedule_in, session, current_user.id)
@@ -50,7 +54,7 @@ async def get_schedule(
     schedule = await report_scheduler.get_schedule(schedule_id, session)
     if not schedule:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Schedule not found")
-    if schedule.created_by != current_user.id and current_user.role.value != "admin":
+    if schedule.created_by != current_user.id and current_user.role != UserRole.ADMIN:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
     return schedule
 
@@ -65,7 +69,7 @@ async def update_schedule(
     schedule = await report_scheduler.get_schedule(schedule_id, session)
     if not schedule:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Schedule not found")
-    if schedule.created_by != current_user.id and current_user.role.value != "admin":
+    if schedule.created_by != current_user.id and current_user.role != UserRole.ADMIN:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
 
     updated = await report_scheduler.update_schedule(schedule_id, updates, session)
@@ -83,7 +87,7 @@ async def delete_schedule(
     schedule = await report_scheduler.get_schedule(schedule_id, session)
     if not schedule:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Schedule not found")
-    if schedule.created_by != current_user.id and current_user.role.value != "admin":
+    if schedule.created_by != current_user.id and current_user.role != UserRole.ADMIN:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
 
     await report_scheduler.delete_schedule(schedule_id, session)
@@ -98,7 +102,7 @@ async def run_schedule_now(
     schedule = await report_scheduler.get_schedule(schedule_id, session)
     if not schedule:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Schedule not found")
-    if schedule.created_by != current_user.id and current_user.role.value != "admin":
+    if schedule.created_by != current_user.id and current_user.role != UserRole.ADMIN:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
 
     try:

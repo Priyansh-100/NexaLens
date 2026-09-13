@@ -6,13 +6,13 @@ from uuid import UUID
 from nexalens.api.auth import get_current_user
 from nexalens.core.exceptions import ValidationError
 from nexalens.core.logging import get_logger
+from nexalens.core.rbac import require_admin
 from nexalens.models.database import OrganizationModel
 from nexalens.models.schemas import (
     Organization,
     OrganizationCreate,
     OrganizationUpdate,
     User,
-    UserRole,
 )
 from nexalens.models.session import get_db_session
 
@@ -45,11 +45,8 @@ async def list_organizations(
 async def create_organization(
     org_in: OrganizationCreate,
     session: AsyncSession = Depends(get_db_session),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ) -> Organization:
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admins can create organizations")
-
     # Check if slug already exists
     existing = await session.execute(select(OrganizationModel).where(OrganizationModel.slug == org_in.slug))
     if existing.scalar_one_or_none():
@@ -102,11 +99,8 @@ async def update_organization(
     org_id: UUID,
     updates: OrganizationUpdate,
     session: AsyncSession = Depends(get_db_session),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ) -> Organization:
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admins can update organizations")
-
     org = await session.get(OrganizationModel, org_id)
     if not org:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
@@ -134,11 +128,8 @@ async def update_organization(
 async def delete_organization(
     org_id: UUID,
     session: AsyncSession = Depends(get_db_session),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admins can delete organizations")
-
     org = await session.get(OrganizationModel, org_id)
     if not org:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
