@@ -1,5 +1,6 @@
 import re
 import time
+from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
@@ -16,6 +17,15 @@ from nexalens.services.llm import llm_service
 
 logger = get_logger(__name__)
 settings = get_settings()
+
+
+@dataclass
+class QueryCostEstimate:
+    """Estimated query execution cost."""
+    estimated_cost: float
+    estimated_rows: int
+    plan_summary: str
+    exceeds_limit: bool
 
 
 SQL_SYSTEM_PROMPT = """You are an expert SQL analyst. Generate precise, executable SQL for PostgreSQL.
@@ -159,6 +169,69 @@ class SQLService:
                 if table_name and table_name not in allowed_tables:
                     raise SQLGenerationError(f"Table '{table_name}' not in allowed schema")
 
+
+class SQLService:
+    def __init__(self):
+        self.max_rows = settings.sql_max_rows
+        self.timeout = settings.sql_timeout
+        self.dialect = settings.sql_dialect
+        self.max_query_cost = getattr(settings, "sql_max_query_cost", 10000.0)  # Default cost limit
+
+    async def estimate_query_cost(
+        self,
+        session: AsyncSession,
+        sql: str,
+    ) -> QueryCostEstimate:
+        """Estimate query execution cost using EXPLAIN (no ANALYZE)."""
+        try:
+            # Use EXPLAIN without ANALYZE to get planner estimates
+            result = await session.execute(text(f"EXPLAIN (FORMAT JSON) {sql}"))
+            plan_data = result.scalar()
+            
+            if not plan_data or not isinstance(plan_data, list):
+                return QueryCostEstimate(
+                    estimated_cost=0.0,
+                    estimated_rows=0,
+                    plan_summary="Could not parse plan",
+                    exceeds_limit=False,
+                )
+            
+            plan = plan_data[0].get("Plan", {})
+            total_cost = plan.get("Total Cost", 0.0)
+            estimated_rows = plan.get("Plan Rows", 0)
+            
+            # Build a simple plan summary
+            def summarize_plan(node: dict, indent: int = 0) -> list[str]:
+                lines = []
+                prefix = "  " * indent
+                node_type = node.get("Node Type", "Unknown")
+                cost = node.get("Total Cost", 0)
+                rows = node.get("Plan Rows", 0)
+                lines.append(f"{prefix}{node_type} (cost={cost:.2f}, rows={rows})")
+                for child in node.get("Plans", []):
+                    lines.extend(summarize_plan(child, indent + 1))
+                return lines
+            
+            plan_lines = summarize_plan(plan)
+            plan_summary = "\n".join(plan_lines[:10])  # Limit summary length
+            
+            exceeds_limit = total_cost > self.max_query_cost
+            
+            return QueryCostEstimate(
+                estimated_cost=total_cost,
+                estimated_rows=estimated_rows,
+                plan_summary=plan_summary,
+                exceeds_limit=exceeds_limit,
+            )
+        except Exception as e:
+            logger.warning("query_cost_estimation_failed", error=str(e))
+            return QueryCostEstimate(
+                estimated_cost=0.0,
+                estimated_rows=0,
+                plan_summary=f"Estimation failed: {e}",
+                exceeds_limit=False,
+            )
+
     async def execute_sql(
         self,
         session: AsyncSession,
@@ -168,6 +241,14 @@ class SQLService:
     ) -> SQLResult:
         # Validate SQL before execution
         self.validate_sql(sql, allowed_tables)
+
+        # Estimate query cost before execution
+        cost_estimate = await self.estimate_query_cost(session, sql)
+        if cost_estimate.exceeds_limit:
+            raise SQLGenerationError(
+                f"Query cost {cost_estimate.estimated_cost:.2f} exceeds limit "
+                f"{self.max_query_cost:.2f}. Plan: {cost_estimate.plan_summary}"
+            )
 
         start_time = time.perf_counter()
         try:
