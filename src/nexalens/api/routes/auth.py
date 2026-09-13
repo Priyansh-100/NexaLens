@@ -1,12 +1,29 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
+from pydantic import BaseModel, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from nexalens.api.auth import authenticate_user, create_token_response, get_current_user
+from nexalens.api.auth import authenticate_user, create_token_response, create_user, get_current_user
 from nexalens.models.schemas import Token, User, UserRole
 from nexalens.models.session import get_db_session
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
+
+
+class RegisterRequest(BaseModel):
+    email: EmailStr
+    password: str
+    name: str
+    role: UserRole = UserRole.VIEWER
+
+
+@router.post("/register", response_model=Token, status_code=status.HTTP_201_CREATED)
+async def register(
+    request: RegisterRequest,
+    session: AsyncSession = Depends(get_db_session),
+):
+    user = await create_user(session, request.email, request.password, request.name, request.role)
+    return create_token_response(user)
 
 
 @router.post("/login", response_model=Token)

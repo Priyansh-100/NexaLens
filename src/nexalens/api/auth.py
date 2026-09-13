@@ -3,6 +3,8 @@ from typing import Optional
 from uuid import UUID
 
 import jwt
+from fastapi import Depends
+from fastapi.security import OAuth2PasswordBearer
 from passlib.context import CryptContext
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +13,7 @@ from nexalens.core.config import get_settings
 from nexalens.core.exceptions import AuthenticationError, ValidationError
 from nexalens.core.logging import get_logger
 from nexalens.models.database import UserModel
+from nexalens.models.session import get_db_session
 from nexalens.models.schemas import Token, TokenPayload, User, UserRole
 
 logger = get_logger(__name__)
@@ -19,6 +22,8 @@ settings = get_settings()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 ALGORITHM = "HS256"
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 
 def hash_password(password: str) -> str:
@@ -71,7 +76,10 @@ async def authenticate_user(session: AsyncSession, email: str, password: str) ->
     return user
 
 
-async def get_current_user(session: AsyncSession, token: str) -> UserModel:
+async def get_current_user(
+    session: AsyncSession = Depends(get_db_session),
+    token: str = Depends(oauth2_scheme),
+) -> UserModel:
     payload = decode_token(token)
     if payload.type != "access":
         raise AuthenticationError("Invalid token type")
