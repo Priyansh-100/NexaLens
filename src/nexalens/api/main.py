@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import make_asgi_app
 
@@ -7,6 +7,7 @@ from nexalens.api.routes import analytics, auth, data_sources, health, organizat
 from nexalens.analytics.scheduler import report_scheduler
 from nexalens.core.config import get_settings
 from nexalens.core.logging import get_logger, setup_logging
+from nexalens.core.rate_limit import add_rate_limit_headers, rate_limiter
 from nexalens.models.session import close_db, init_db
 
 settings = get_settings()
@@ -21,6 +22,7 @@ async def lifespan(app: FastAPI):
     report_scheduler.start()
     yield
     report_scheduler.shutdown()
+    await rate_limiter.close()
     await close_db()
     logger.info("application_shutdown")
 
@@ -41,6 +43,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Rate limit headers middleware
+app.middleware("http")(add_rate_limit_headers)
 
 if settings.enable_metrics:
     metrics_app = make_asgi_app()
