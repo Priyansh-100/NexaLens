@@ -1,0 +1,85 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+htmlcov
+.tox
+.venv
+venv/
+env/
+ENV/
+
+# Build
+dist/
+build/
+*.egg-info/
+*.egg
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Test files
+tests/
+test_*.py
+*_test.py
+
+# Documentation
+*.md
+docs/
+
+# Configuration (use env files instead)
+.env
+.env.local
+.env.*.local
+
+# Docker
+docker/
+docker-compose*.yml
+Dockerfile*
+.dockerignore
+
+# UI
+ui/
+
+# Scripts (except init_readonly_role.py)
+scripts/*
+!scripts/init_readonly_role.py
+
+# Data
+data/
+*.db
+*.sqlite
+
+# Model weights
+models/
+*.bin
+*.pt
+*.pth
+
+# Temporary
+tmp/
+temp/
+*.tmp

@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     postgres_user: str = "postgres"
     postgres_password: str = "change-me-in-production"
     postgres_db: str = "nexalens"
+    postgres_readonly_user: str = "nexalens_readonly"
+    postgres_readonly_password: str = "change-me-in-production"
     database_url: str = Field(default="", validation_alias="DATABASE_URL")
     database_pool_size: int = 10
     database_max_overflow: int = 20
@@ -84,6 +86,8 @@ class Settings(BaseSettings):
                 raise ValueError("Production SECRET_KEY must be configured (not default)")
             if self.postgres_password == "change-me-in-production":
                 raise ValueError("Production POSTGRES_PASSWORD must be configured")
+            if self.postgres_readonly_password == "change-me-in-production":
+                raise ValueError("Production POSTGRES_READONLY_PASSWORD must be configured")
         return self
 
     @model_validator(mode="after")

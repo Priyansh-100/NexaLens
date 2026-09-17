@@ -38,5 +38,155 @@
     "question": "What are the key terms in our standard MSA?",
     "intent": "document",
     "relevant_doc_ids": ["550e8400-e29b-41d4-a716-446655440103"]
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440007",
+    "question": "Build a DCF model with 15% discount rate and 3% terminal growth",
+    "intent": "financial_model",
+    "relevant_doc_ids": []
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440008",
+    "question": "Calculate NPV of cash flows [-100000, 30000, 40000, 50000, 60000] at 10% discount rate",
+    "intent": "financial_model",
+    "relevant_doc_ids": []
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440009",
+    "question": "What is the IRR for an investment of -50000 with returns [15000, 20000, 25000]?",
+    "intent": "financial_model",
+    "relevant_doc_ids": []
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440010",
+    "question": "Forecast revenue for next 12 months",
+    "intent": "forecast",
+    "relevant_doc_ids": []
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440011",
+    "question": "Predict churn rate for next quarter using Prophet",
+    "intent": "forecast",
+    "relevant_doc_ids": []
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440012",
+    "question": "Email me monthly revenue report every Monday 9am",
+    "intent": "schedule_report",
+    "relevant_doc_ids": []
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440013",
+    "question": "Schedule weekly dashboard delivery to Slack",
+    "intent": "schedule_report",
+    "relevant_doc_ids": []
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440014",
+    "question": "How are we doing?",
+    "intent": "clarification",
+    "relevant_doc_ids": []
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440015",
+    "question": "What was our top selling product by revenue in 2023?",
+    "intent": "sql",
+    "expected_sql": "SELECT product_name, SUM(amount) as total_revenue FROM orders JOIN products ON orders.product_id = products.id WHERE order_date >= '2023-01-01' AND order_date < '2024-01-01' GROUP BY product_name ORDER BY total_revenue DESC LIMIT 1",
+    "relevant_doc_ids": []
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440016",
+    "question": "Show me customer acquisition cost by channel for Q4 2023",
+    "intent": "sql",
+    "expected_sql": "SELECT channel, SUM(spend) / COUNT(DISTINCT customer_id) as cac FROM marketing_spend WHERE date >= '2023-10-01' AND date < '2024-01-01' GROUP BY channel",
+    "relevant_doc_ids": []
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440017",
+    "question": "What does our data retention policy say about customer PII?",
+    "intent": "document",
+    "relevant_doc_ids": ["550e8400-e29b-41d4-a716-446655440104"]
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440018",
+    "question": "Compare actual vs budget for marketing spend in 2023 and reference the budget approval doc",
+    "intent": "hybrid",
+    "expected_sql": "SELECT month, SUM(actual_spend) as actual, SUM(budgeted_spend) as budget FROM marketing_spend WHERE date >= '2023-01-01' AND date < '2024-01-01' GROUP BY month",
+    "relevant_doc_ids": ["550e8400-e29b-41d4-a716-446655440105"]
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440019",
+    "question": "Calculate payback period for project with cash flows [-200000, 50000, 60000, 70000, 80000]",
+    "intent": "financial_model",
+    "relevant_doc_ids": []
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440020",
+    "question": "Run sensitivity analysis on DCF with discount rate 8%-15% and terminal growth 1%-4%",
+    "intent": "financial_model",
+    "relevant_doc_ids": []
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440021",
+    "question": "Forecast daily active users for next 30 days",
+    "intent": "forecast",
+    "relevant_doc_ids": []
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440022",
+    "question": "Predict quarterly revenue for next 4 quarters using ARIMA",
+    "intent": "forecast",
+    "relevant_doc_ids": []
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440023",
+    "question": "Send me daily sales summary at 8am via email",
+    "intent": "schedule_report",
+    "relevant_doc_ids": []
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440024",
+    "question": "Generate quarterly board report in PDF format every quarter end",
+    "intent": "schedule_report",
+    "relevant_doc_ids": []
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440025",
+    "question": "Tell me something interesting",
+    "intent": "clarification",
+    "relevant_doc_ids": []
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440026",
+    "question": "What is the average order value by customer segment?",
+    "intent": "sql",
+    "expected_sql": "SELECT customer_segment, AVG(amount) as avg_order_value FROM orders JOIN customers ON orders.customer_id = customers.id GROUP BY customer_segment",
+    "relevant_doc_ids": []
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440027",
+    "question": "Show me the employee handbook section on remote work policy",
+    "intent": "document",
+    "relevant_doc_ids": ["550e8400-e29b-41d4-a716-446655440106"]
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440028",
+    "question": "Analyze Q4 revenue per the earnings report and compare to SQL data",
+    "intent": "hybrid",
+    "expected_sql": "SELECT SUM(amount) as q4_revenue FROM orders WHERE order_date >= '2023-10-01' AND order_date < '2024-01-01'",
+    "relevant_doc_ids": ["550e8400-e29b-41d4-a716-446655440107"]
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440029",
+    "question": "What was our gross margin percentage last year?",
+    "intent": "sql",
+    "expected_sql": "SELECT (SUM(revenue) - SUM(cogs)) / SUM(revenue) * 100 as gross_margin_pct FROM financials WHERE year = 2023",
+    "relevant_doc_ids": []
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440030",
+    "question": "Calculate NPV with varying discount rates for the new product launch",
+    "intent": "financial_model",
+    "relevant_doc_ids": []
   }
 ]

@@ -1,0 +1,68 @@
+app:
+  name: "nexalens"
+  env: "development"
+  log_level: "DEBUG"
+
+database:
+  postgres_user: "postgres"
+  postgres_password: "postgres"
+  postgres_db: "nexalens"
+  database_pool_size: 5
+  database_max_overflow: 10
+  postgres_readonly_user: "nexalens_readonly"
+  postgres_readonly_password: "readonly-dev"
+
+redis:
+  url: "redis://localhost:6379/0"
+
+chroma:
+  host: "localhost"
+  port: 8001
+  collection: "nexalens_docs"
+
+ollama:
+  host: "http://localhost:11434"
+  llm_model: "llama3.1:8b"
+  llm_embedding_model: "nomic-embed-text"
+  llm_temperature: 0.1
+  llm_max_tokens: 4096
+
+sql:
+  dialect: "postgresql"
+  max_rows: 1000
+  timeout: 30
+  max_query_cost: 10000.0
+
+documents:
+  chunk_size: 1000
+  chunk_overlap: 200
+  max_doc_size_mb: 50
+  supported_extensions: [".pdf", ".txt", ".md", ".csv", ".xlsx", ".docx"]
+
+api:
+  host: "0.0.0.0"
+  port: 8000
+  workers: 1
+  cors_origins: ["http://localhost:3000", "http://localhost:8501"]
+
+security:
+  secret_key: "dev-secret-change-in-production"
+  access_token_expire_minutes: 60
+  refresh_token_expire_days: 7
+
+metrics:
+  enable_metrics: true
+  metrics_port: 9090
+
+rag:
+  quality:
+    chunking_strategy: "recursive"
+    top_k: 20
+    rerank_top_k: 10
+    rerank_enabled: false
+    min_score_threshold: 0.3
+    dedup_threshold: 0.9
+    dedup_enabled: true
+    require_citations: true
+    max_citations_per_answer: 5
+    confidence_threshold: 0.4

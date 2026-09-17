@@ -13,10 +13,17 @@ from nexalens.evaluation.metrics import (
     EvaluationResult,
     RetrievalMetrics,
     SQLMetrics,
+    AnswerFaithfulnessMetrics,
+    IntentClassificationMetrics,
+    ToolSelectionMetrics,
     evaluate_retrieval,
     evaluate_sql,
+    evaluate_answer_faithfulness,
+    evaluate_intent_classification,
+    evaluate_tool_selection,
 )
 from nexalens.models.database import QueryLogModel
+from nexalens.models.schemas import QueryIntent
 from nexalens.models.session import get_db_session
 from nexalens.rag.orchestrator import rag_orchestrator
 from nexalens.services.embeddings import embedding_service
@@ -28,6 +35,8 @@ class EvaluationRunner:
     def __init__(self, dataset_path: Path | None = None):
         self.dataset_path = dataset_path or Path("tests/eval_dataset.json")
         self.results: list[EvaluationResult] = []
+        self.all_predictions: list[QueryIntent] = []
+        self.all_ground_truth: list[QueryIntent] = []
 
     async def run(self, session: AsyncSession, limit: int | None = None) -> list[EvaluationResult]:
         dataset = self._load_dataset()
@@ -40,6 +49,11 @@ class EvaluationRunner:
             result = await self._evaluate_item(session, item)
             self.results.append(result)
 
+            if item.get("intent"):
+                self.all_predictions.append(result.intent)
+                self.all_ground_truth.append(QueryIntent(item["intent"]))
+
+        self._evaluate_intent_and_tools()
         self._print_summary()
         return self.results
 
@@ -60,7 +74,7 @@ class EvaluationRunner:
 
         start_time = time.perf_counter()
 
-        from nexalens.models.schemas import QueryRequest, QueryIntent
+        from nexalens.models.schemas import QueryRequest
         request = QueryRequest(
             question=question,
             intent=QueryIntent(expected_intent) if expected_intent else None,
@@ -82,10 +96,20 @@ class EvaluationRunner:
         if expected_sql and response.sql_result:
             sql_metrics = evaluate_sql(response.sql_result.sql, expected_sql, session)
 
+        faithfulness_metrics = evaluate_answer_faithfulness(
+            response.answer,
+            response.sql_result,
+            [{"document_id": r.document_id, "title": r.title} for r in response.document_results],
+            response.financial_result,
+            response.forecast_result,
+        )
+
         passed = True
         if retrieval_metrics and retrieval_metrics.hit_rate < 0.5:
             passed = False
         if sql_metrics and sql_metrics.execution_accuracy < 1.0:
+            passed = False
+        if faithfulness_metrics.faithfulness_score < 0.7:
             passed = False
 
         return EvaluationResult(
@@ -94,10 +118,26 @@ class EvaluationRunner:
             intent=response.intent.value,
             retrieval=retrieval_metrics,
             sql=sql_metrics,
+            faithfulness=faithfulness_metrics,
             latency_ms=latency_ms,
             confidence=response.confidence,
             passed=passed,
         )
+
+    def _evaluate_intent_and_tools(self) -> None:
+        if not self.all_predictions or not self.all_ground_truth:
+            return
+
+        intent_metrics = evaluate_intent_classification(
+            self.all_predictions, self.all_ground_truth
+        )
+        tool_metrics = evaluate_tool_selection(
+            self.all_predictions, self.all_ground_truth
+        )
+
+        for result in self.results:
+            result.intent_metrics = intent_metrics
+            result.tool_selection = tool_metrics
 
     def _print_summary(self) -> None:
         if not self.results:
@@ -110,6 +150,7 @@ class EvaluationRunner:
 
         retrieval_hits = [r.retrieval.hit_rate for r in self.results if r.retrieval]
         sql_acc = [r.sql.execution_accuracy for r in self.results if r.sql]
+        faithfulness_scores = [r.faithfulness.faithfulness_score for r in self.results if r.faithfulness]
 
         logger.info(
             "evaluation_complete",
@@ -120,7 +161,28 @@ class EvaluationRunner:
             avg_confidence=f"{avg_confidence:.1%}",
             retrieval_hit_rate=f"{sum(retrieval_hits)/len(retrieval_hits):.1%}" if retrieval_hits else "N/A",
             sql_execution_accuracy=f"{sum(sql_acc)/len(sql_acc):.1%}" if sql_acc else "N/A",
+            answer_faithfulness=f"{sum(faithfulness_scores)/len(faithfulness_scores):.1%}" if faithfulness_scores else "N/A",
         )
+
+        if self.results[0].intent_metrics:
+            im = self.results[0].intent_metrics
+            logger.info(
+                "intent_classification_metrics",
+                accuracy=f"{im.accuracy:.1%}",
+                macro_f1=f"{sum(im.per_class_f1.values())/len(im.per_class_f1):.1%}" if im.per_class_f1 else "N/A",
+            )
+
+        if self.results[0].tool_selection:
+            tm = self.results[0].tool_selection
+            logger.info(
+                "tool_selection_metrics",
+                accuracy=f"{tm.accuracy:.1%}",
+                sql_vs_rag=f"{tm.sql_vs_rag_correct:.1%}",
+                hybrid=f"{tm.hybrid_routing_correct:.1%}",
+                financial=f"{tm.financial_model_correct:.1%}",
+                forecast=f"{tm.forecast_correct:.1%}",
+                schedule=f"{tm.schedule_correct:.1%}",
+            )
 
     def export_results(self, output_path: Path) -> None:
         data = [asdict(r) for r in self.results]
@@ -130,6 +192,12 @@ class EvaluationRunner:
                 d["retrieval"] = asdict(d["retrieval"])
             if d.get("sql"):
                 d["sql"] = asdict(d["sql"])
+            if d.get("faithfulness"):
+                d["faithfulness"] = asdict(d["faithfulness"])
+            if d.get("intent_metrics"):
+                d["intent_metrics"] = asdict(d["intent_metrics"])
+            if d.get("tool_selection"):
+                d["tool_selection"] = asdict(d["tool_selection"])
 
         with open(output_path, "w") as f:
             json.dump(data, f, indent=2, default=str)
